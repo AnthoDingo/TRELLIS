@@ -10,7 +10,7 @@ from ..modules import sparse as sp
 from .random_utils import sphere_hammersley_sequence
 
 
-def yaw_pitch_r_fov_to_extrinsics_intrinsics(yaws, pitchs, rs, fovs):
+def yaw_pitch_r_fov_to_extrinsics_intrinsics(yaws, pitchs, rs, fovs, dtype=torch.float32):
     is_list = isinstance(yaws, list)
     if not is_list:
         yaws = [yaws]
@@ -29,9 +29,13 @@ def yaw_pitch_r_fov_to_extrinsics_intrinsics(yaws, pitchs, rs, fovs):
             torch.sin(yaw) * torch.cos(pitch),
             torch.cos(yaw) * torch.cos(pitch),
             torch.sin(pitch),
-        ]).cuda() * r
-        extr = utils3d.torch.extrinsics_look_at(orig, torch.tensor([0, 0, 0]).float().cuda(), torch.tensor([0, 0, 1]).float().cuda())
+        ],  dtype=dtype, device='cuda') * r
+        extr = utils3d.torch.extrinsics_look_at(orig,
+                                                torch.tensor([0, 0, 0], dtype=dtype, device='cuda'),
+                                                torch.tensor([0, 0, 1], dtype=dtype, device='cuda'))
         intr = utils3d.torch.intrinsics_from_fov_xy(fov, fov)
+        if intr.dtype != dtype:
+            intr = intr.to(dtype)
         extrinsics.append(extr)
         intrinsics.append(intr)
     if not is_list:
@@ -76,6 +80,8 @@ def render_frames(sample, extrinsics, intrinsics, options={}, colors_overwrite=N
         if isinstance(sample, MeshExtractResult):
             res = renderer.render(sample, extr, intr)
             if 'normal' not in rets: rets['normal'] = []
+            if torch.isnan(res['normal']).any() or torch.isinf(res['normal']).any():
+                res['normal'] = torch.nan_to_num(res['normal'], nan=0.0, posinf=0.0, neginf=0.0)
             rets['normal'].append(np.clip(res['normal'].detach().cpu().numpy().transpose(1, 2, 0) * 255, 0, 255).astype(np.uint8))
         else:
             res = renderer.render(sample, extr, intr, colors_overwrite=colors_overwrite)
@@ -92,21 +98,33 @@ def render_frames(sample, extrinsics, intrinsics, options={}, colors_overwrite=N
 
 
 def render_video(sample, resolution=512, bg_color=(0, 0, 0), num_frames=300, r=2, fov=40, **kwargs):
+    # Dynamically check for the dtype,  so that float16, float32 work:
+    if hasattr(sample, 'vertices') and hasattr(sample.vertices, 'dtype'):
+        dtype = sample.vertices.dtype
+    else:
+        dtype = torch.float32 #for Gaussian etc - use default dtype, since float16 isn't supported by those
+    # proceed:
     yaws = torch.linspace(0, 2 * 3.1415, num_frames)
     pitch = 0.25 + 0.5 * torch.sin(torch.linspace(0, 2 * 3.1415, num_frames))
     yaws = yaws.tolist()
     pitch = pitch.tolist()
-    extrinsics, intrinsics = yaw_pitch_r_fov_to_extrinsics_intrinsics(yaws, pitch, r, fov)
+    extrinsics, intrinsics = yaw_pitch_r_fov_to_extrinsics_intrinsics(yaws, pitch, r, fov, dtype=dtype)
     return render_frames(sample, extrinsics, intrinsics, {'resolution': resolution, 'bg_color': bg_color}, **kwargs)
 
 
 def render_multiview(sample, resolution=512, nviews=30):
+    # Dynamically check for the dtype,  so that float16, float32 work:
+    if hasattr(sample, 'vertices') and hasattr(sample.vertices, 'dtype'):
+        dtype = sample.vertices.dtype
+    else:
+        dtype = torch.float32 #for Gaussian etc - use default dtype, since float16 isn't supported by those
+    # proceed:
     r = 2
     fov = 40
     cams = [sphere_hammersley_sequence(i, nviews) for i in range(nviews)]
     yaws = [cam[0] for cam in cams]
     pitchs = [cam[1] for cam in cams]
-    extrinsics, intrinsics = yaw_pitch_r_fov_to_extrinsics_intrinsics(yaws, pitchs, r, fov)
+    extrinsics, intrinsics = yaw_pitch_r_fov_to_extrinsics_intrinsics(yaws, pitchs, r, fov, dtype=dtype)
     res = render_frames(sample, extrinsics, intrinsics, {'resolution': resolution, 'bg_color': (0, 0, 0)})
     return res['color'], extrinsics, intrinsics
 

@@ -95,10 +95,11 @@ class MeshRenderer:
 
         vertices_homo = torch.cat([vertices, torch.ones_like(vertices[..., :1])], dim=-1)
         vertices_camera = torch.bmm(vertices_homo, RT.transpose(-1, -2))
-        vertices_clip = torch.bmm(vertices_homo, full_proj.transpose(-1, -2))
+        # .to(float32) becuase dr needs vertex positions to  always be float32, regardless of pipeline precision:
+        vertices_clip = torch.bmm(vertices_homo, full_proj.transpose(-1, -2)).float()
         faces_int = mesh.faces.int()
-        rast, _ = dr.rasterize(
-            self.glctx, vertices_clip, faces_int, (resolution * ssaa, resolution * ssaa))
+        rast,  _  = dr.rasterize(self.glctx, vertices_clip, faces_int, (resolution * ssaa, resolution * ssaa))
+        rast      = rast.float() #must always be float32
         
         out_dict = edict()
         for type in return_types:
@@ -106,21 +107,24 @@ class MeshRenderer:
             if type == "mask" :
                 img = dr.antialias((rast[..., -1:] > 0).float(), rast, vertices_clip, faces_int)
             elif type == "depth":
-                img = dr.interpolate(vertices_camera[..., 2:3].contiguous(), rast, faces_int)[0]
+                img = dr.interpolate(vertices_camera[..., 2:3].float().contiguous(), rast, faces_int)[0]
                 img = dr.antialias(img, rast, vertices_clip, faces_int)
             elif type == "normal" :
                 img = dr.interpolate(
-                    mesh.face_normal.reshape(1, -1, 3), rast,
+                    #.float(), because must always be float32 regardless of pipeline precision:
+                    mesh.face_normal.reshape(1, -1, 3).float(), rast, 
                     torch.arange(mesh.faces.shape[0] * 3, device=self.device, dtype=torch.int).reshape(-1, 3)
                 )[0]
                 img = dr.antialias(img, rast, vertices_clip, faces_int)
                 # normalize norm pictures
                 img = (img + 1) / 2
             elif type == "normal_map" :
-                img = dr.interpolate(mesh.vertex_attrs[:, 3:].contiguous(), rast, faces_int)[0]
+                #.float(), because must always be float32 regardless of pipeline precision:
+                img = dr.interpolate(mesh.vertex_attrs[:, 3:].contiguous().float(), rast, faces_int)[0]
                 img = dr.antialias(img, rast, vertices_clip, faces_int)
             elif type == "color" :
-                img = dr.interpolate(mesh.vertex_attrs[:, :3].contiguous(), rast, faces_int)[0]
+                #.float(), because must always be float32 regardless of pipeline precision:
+                img = dr.interpolate(mesh.vertex_attrs[:, :3].contiguous().float(), rast, faces_int)[0]
                 img = dr.antialias(img, rast, vertices_clip, faces_int)
 
             if ssaa > 1:

@@ -236,6 +236,7 @@ def postprocess_mesh(
         vertices, faces = mesh.points, mesh.faces.reshape(-1, 4)[:, 1:]
         if verbose:
             tqdm.write(f'After decimate: {vertices.shape[0]} vertices, {faces.shape[0]} faces')
+        vertices = vertices.astype(np.float32) #pipeline can return half-precision, so cast to float32 else pv.PolyData() or torch.rasterize_triangle_faces will complain
 
     # Remove invisible faces
     if fill_holes:
@@ -309,7 +310,7 @@ def bake_texture(
     vertices = torch.tensor(vertices).cuda()
     faces = torch.tensor(faces.astype(np.int32)).cuda()
     uvs = torch.tensor(uvs).cuda()
-    observations = [torch.tensor(obs / 255.0).float().cuda() for obs in observations]
+    observations = [torch.tensor(obs / 255.0, dtype=torch.float16).cuda() for obs in observations]#float16 instead of float32, to fit into low VRAM gpus
     masks = [torch.tensor(m>0).bool().cuda() for m in masks]
     views = [utils3d.torch.extrinsics_to_view(torch.tensor(extr).cuda()) for extr in extrinsics]
     projections = [utils3d.torch.intrinsics_to_perspective(torch.tensor(intr).cuda(), near, far) for intr in intrinsics]

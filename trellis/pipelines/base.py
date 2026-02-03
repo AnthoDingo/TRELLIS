@@ -49,13 +49,20 @@ class Pipeline:
 
     @property
     def device(self) -> torch.device:
+        # Jan 2025 memory optimizations: we'll move different models between CPU and GPU.
+        # Our models are kept on CPU, but a model that is active is always loaded into GPU.
+        # return 'cuda' if there is at least 1 model on CUDA. 
+        # Only return 'cpu' if everything is on CPU:
         for model in self.models.values():
-            if hasattr(model, 'device'):
-                return model.device
-        for model in self.models.values():
+            if hasattr(model, 'device') and model.device.type == 'cuda':
+                    return torch.device('cuda')
             if hasattr(model, 'parameters'):
-                return next(model.parameters()).device
-        raise RuntimeError("No device found.")
+                try:
+                    if next(model.parameters()).device.type == 'cuda':
+                        return torch.device('cuda')
+                except StopIteration:
+                    continue # Handle models with no parameters.
+        return torch.device('cpu')# If we get here, no models were on cuda.
 
     def to(self, device: torch.device) -> None:
         for model in self.models.values():

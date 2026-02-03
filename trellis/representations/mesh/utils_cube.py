@@ -32,7 +32,10 @@ def cubes_to_verts(num_verts, cubes, value, reduce='mean'):
         reduced[cubes[i][j]][k] += value[i][k]
     """
     M = value.shape[2] # number of channels
-    reduced = torch.zeros(num_verts, M, device=cubes.device)
+    # dtype so that it works with half precision of the pipline:
+    # NOTICE:  value.device  but  value.dtype,  not cubes.dtype.
+    # this way the “destination”/accumulator reduced is in the same dtype as the “source” value.
+    reduced = torch.zeros(num_verts, M, device=value.device, dtype=value.dtype)
     return torch.scatter_reduce(reduced, 0, 
         cubes.unsqueeze(-1).expand(-1, -1, M).flatten(0, 1), 
         value.flatten(0, 1), reduce=reduce, include_self=False)
@@ -49,7 +52,7 @@ def sparse_cube2verts(coords, feats, training=True):
 
 def get_dense_attrs(coords : torch.Tensor, feats : torch.Tensor, res : int, sdf_init=True):
     F = feats.shape[-1]
-    dense_attrs = torch.zeros([res] * 3 + [F], device=feats.device)
+    dense_attrs = torch.zeros([res] * 3 + [F], device=feats.device, dtype=feats.dtype)#dtype so that it works with half precision of the pipline
     if sdf_init:
         dense_attrs[..., 0] = 1 # initial outside sdf value
     dense_attrs[coords[:, 0], coords[:, 1], coords[:, 2], :] = feats
@@ -57,5 +60,9 @@ def get_dense_attrs(coords : torch.Tensor, feats : torch.Tensor, res : int, sdf_
 
 
 def get_defomed_verts(v_pos : torch.Tensor, deform : torch.Tensor, res):
-    return v_pos / res - 0.5 + (1 - 1e-8) / (res * 2) * torch.tanh(deform)
+    # Cast v_pos to match deform's dtype without extra allocation when possible
+    half_res = (1 - 1e-8) / (res * 2)
+    offset = - 0.5 + half_res * torch.tanh(deform)
+    #dtype, to work with float16, else it always returns float32:
+    return v_pos.to(dtype=deform.dtype, copy=False) / res + offset
         

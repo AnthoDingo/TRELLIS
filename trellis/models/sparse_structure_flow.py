@@ -40,14 +40,17 @@ class TimestepEmbedder(nn.Module):
         freqs = torch.exp(
             -np.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
         ).to(device=t.device)
-        args = t[:, None].float() * freqs[None]
+        args = t[:, None].to(t.dtype) * freqs[None]  #to(t.dtype) so that it works with float16, float32 etc.
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)        
+         # Convert back to input dtype before returning
         return embedding
 
     def forward(self, t):
+        t = t.to(self.mlp[0].weight.dtype)# Make sure t matches the MLP’s dtype (often half if the model is half)
         t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
+        t_freq = t_freq.to(self.mlp[0].weight.dtype)# also ensure t_freq is cast if needed
         t_emb = self.mlp(t_freq)
         return t_emb
 

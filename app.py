@@ -2,6 +2,11 @@ import gradio as gr
 from gradio_litmodel3d import LitModel3D
 
 import os
+import sys
+sys.path.append(os.getcwd())
+os.environ['ATTN_BACKEND'] = 'xformers'
+os.environ['SPCONV_ALGO'] = 'native' 
+
 import shutil
 from typing import *
 import torch

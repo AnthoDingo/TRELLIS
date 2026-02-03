@@ -4,15 +4,17 @@ import torch.nn as nn
 
 class LayerNorm32(nn.LayerNorm):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return super().forward(x.float()).type(x.dtype)
+        needed_dtype = self.weight.dtype if self.weight is not None else x.dtype # to make it work both with float16 and float32
+        return super().forward(x.to(needed_dtype)).type(x.dtype)
     
 
 class GroupNorm32(nn.GroupNorm):
     """
-    A GroupNorm layer that converts to float32 before the forward pass.
+    A GroupNorm layer that converts to float16 before the forward pass.
     """
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return super().forward(x.float()).type(x.dtype)
+        needed_dtype = self.weight.dtype if self.weight is not None else x.dtype # to make it work both with float16 and float32
+        return super().forward(x.to(needed_dtype)).type(x.dtype)
     
     
 class ChannelLayerNorm32(LayerNorm32):

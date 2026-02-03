@@ -48,11 +48,13 @@ class SparseGroupNorm32(SparseGroupNorm):
     A GroupNorm layer that converts to float32 before the forward pass.
     """
     def forward(self, x: SparseTensor) -> SparseTensor:
-        return super().forward(x.float()).type(x.dtype)
+        weight_dtype = self.weight.dtype # to make it work both with float16 and float32
+        return super().forward(x.to(weight_dtype)).type(x.dtype)
 
 class SparseLayerNorm32(SparseLayerNorm):
     """
     A LayerNorm layer that converts to float32 before the forward pass.
     """
     def forward(self, x: SparseTensor) -> SparseTensor:
-        return super().forward(x.float()).type(x.dtype)
+        weight_dtype = self.weight.dtype # to make it work both with float16 and float32
+        return super().forward(x.to(weight_dtype)).type(x.dtype)

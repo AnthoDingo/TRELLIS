@@ -18,6 +18,8 @@ def __from_env():
         DEBUG = env_sttn_debug == '1'
 
     print(f"[ATTENTION] Using backend: {BACKEND}")
+    print(f"Please wait...") #long wait follows, so give a message.
+    print(f"")
         
 
 __from_env()
