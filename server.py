@@ -14,6 +14,16 @@ from PIL import Image
 from io import BytesIO
 import requests
 import base64
+from huggingface_hub import snapshot_download
+
+import warnings
+
+# Masquer les warnings xFormers de DINOv2
+warnings.filterwarnings("ignore", message="xFormers is not available")
+warnings.filterwarnings("ignore", message="xFormers is not available (SwiGLU)")
+warnings.filterwarnings("ignore", message="xFormers is not available (Attention)")
+warnings.filterwarnings("ignore", message="xFormers is not available (Block)")
+
 
 # --- OPTIMISATION MÉMOIRE CUDA ---
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
@@ -24,7 +34,7 @@ torch.cuda.empty_cache()
 torch.cuda.reset_peak_memory_stats()
 
 # --- VERSION DU SERVEUR ---
-SERVER_VERSION = "v15.1_STACK_2026_FINAL"
+SERVER_VERSION = "v15.2_STACK_2026_FINAL"
 
 # Diagnostic au boot
 print(f"🚀 TRELLIS BOOT - {SERVER_VERSION}")
@@ -62,8 +72,42 @@ for i in range(NUM_GPUS):
     gpu_mem = torch.cuda.get_device_properties(i).total_memory / 1e9
     print(f"   GPU {i}: {torch.cuda.get_device_name(i)} ({gpu_mem:.2f}GB)")
 
+# Téléchargement du model
+MODEL_NAME = os.environ.get("MODEL_NAME", "JeffreyXiang/TRELLIS-image-large")
+LOCAL_DIR = "/app/model"
+
+print(f"🔍 Vérification du modèle local dans {LOCAL_DIR}...")
+
+# Vérifier si le dossier existe et contient des fichiers
+model_exists = os.path.isdir(LOCAL_DIR) and len(os.listdir(LOCAL_DIR)) > 0
+
+if not model_exists:
+    print("⚠️ Modèle introuvable localement.")
+
+    # Vérifier la présence du token HF
+    HF_TOKEN = os.environ.get("HF_TOKEN", "").strip()
+
+    if not HF_TOKEN:
+        print("❌ ERREUR : Le modèle n'est pas présent et aucune variable d'environnement HF_TOKEN n'est définie.")
+        print("➡️  Impossible de télécharger le modèle HuggingFace sans token.")
+        sys.exit(1)
+
+    print(f"⏳ Téléchargement du modèle {MODEL_NAME} vers {LOCAL_DIR}...")
+
+    try:
+        snapshot_download(
+            repo_id=MODEL_NAME,
+            local_dir=LOCAL_DIR,
+            token=HF_TOKEN,
+            local_dir_use_symlinks=False,  # Important pour Docker
+            ignore_patterns=["*.msgpack", "*.bin"]  # On garde uniquement les safetensors
+        )
+        print("✅ Téléchargement terminé !")
+    except Exception as e:
+        print(f"❌ Échec du téléchargement du modèle : {str(e)}")
+        sys.exit(1)
+
 # Chargement du modèle LARGE (optimal avec 2 GPUs)
-MODEL_NAME = "JeffreyXiang/TRELLIS-image-large"
 print(f"⏳ Chargement du modèle LARGE...")
 
 print("💾 Optimisation: activation de la réduction de mémoire...")

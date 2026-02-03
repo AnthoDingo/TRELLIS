@@ -155,6 +155,15 @@ if [ "$XFORMERS" = true ] ; then
                 2.5.0) pip install xformers==0.0.28.post2 --index-url https://download.pytorch.org/whl/cu124 ;;
                 *) echo "[XFORMERS] Unsupported PyTorch & CUDA version: $PYTORCH_VERSION & $CUDA_VERSION" ;;
             esac
+        elif [ "$CUDA_VERSION" = "12.8" ] ; then
+            case $PYTORCH_VERSION in
+                2.5.0) pip install xformers==0.0.28.post2 --index-url https://download.pytorch.org/whl/cu128 ;;
+                2.6.0) pip install xformers==0.0.29 --index-url https://download.pytorch.org/whl/cu128 ;;
+                2.7.0) pip install xformers==0.0.30 --index-url https://download.pytorch.org/whl/cu128 ;;
+                2.7.1) pip install xformers==0.0.31 --index-url https://download.pytorch.org/whl/cu128 ;;
+                2.7.1+cu128) pip install xformers==0.0.31 --index-url https://download.pytorch.org/whl/cu128 ;;
+                *) echo "[XFORMERS] Unsupported PyTorch & CUDA version: $PYTORCH_VERSION & $CUDA_VERSION" ;;
+            esac
         else
             echo "[XFORMERS] Unsupported CUDA version: $CUDA_MAJOR_VERSION"
         fi
@@ -206,7 +215,7 @@ if [ "$NVDIFFRAST" = true ] ; then
     if [ "$PLATFORM" = "cuda" ] ; then
         mkdir -p /tmp/extensions
         git clone https://github.com/NVlabs/nvdiffrast.git /tmp/extensions/nvdiffrast
-        pip install /tmp/extensions/nvdiffrast
+        pip install --no-build-isolation /tmp/extensions/nvdiffrast
     else
         echo "[NVDIFFRAST] Unsupported platform: $PLATFORM"
     fi
